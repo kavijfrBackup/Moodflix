@@ -241,10 +241,20 @@ export default function MoodFlix() {
   const [screen, setScreen] = useState("home");
   const [tmdbMovies, setTmdbMovies] = useState([]);
   const [activeMood, setActiveMood] = useState(null);
-  const [watchlist, setWatchlist] = useState([]);
+const [watchlist, setWatchlist] = useState(() => {
+  const saved = localStorage.getItem("moodflixWatchlist");
+  return saved ? JSON.parse(saved) : [];
+});
   const [activeMovie, setActiveMovie] = useState(null);
   const [trailerKey, setTrailerKey] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+  localStorage.setItem(
+    "moodflixWatchlist",
+    JSON.stringify(watchlist)
+  );
+}, [watchlist]);
 
   useEffect(() => {
     if (!activeMood) return;
