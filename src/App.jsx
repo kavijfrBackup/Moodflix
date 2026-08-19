@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Coffee, Brain, HeartCrack, Flame, Ghost, Sparkles,
   Heart, X, Play, Clock, Star, ArrowLeft, Film, ChevronRight
@@ -17,6 +17,8 @@ const TOKENS = {
   textMuted: "#A9A2BE",
   border: "#332C4E",
 };
+
+const TMDB_IMAGE_URL = "https://image.tmdb.org/t/p/w500";
 
 const FONT_IMPORT = `
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
@@ -70,6 +72,15 @@ const MOODS = [
   },
 ];
 
+const MOOD_GENRES = {
+  cozy: [35, 10751, 10749],       // Comedy, Family, Romance
+  mindbend: [878, 9648, 53],      // Sci-Fi, Mystery, Thriller
+  heartbreak: [10749, 18],        // Romance, Drama
+  hype: [28, 12, 878],            // Action, Adventure, Sci-Fi
+  spooky: [27, 53, 9648],         // Horror, Thriller, Mystery
+  feelgood: [35, 10751, 12],      // Comedy, Family, Adventure
+};
+
 const MOVIES = [
   // cozy
   { id: 1, title: "Paddington 2", year: 2017, runtime: 103, vibe: 9.4, mood: "cozy", blurb: "A polite bear untangles a heist with nothing but marmalade sandwiches and good manners.", palette: ["#b98a56", "#6b4a3a"] },
@@ -105,7 +116,9 @@ const MOVIES = [
 
 // ---------------------------------------------------------------------------
 // Small building blocks
-// ---------------------------------------------------------------------------
+// ----------------------
+// -----------------------------------------------------
+
 function FilmStrip({ style }) {
   return (
     <div
@@ -142,7 +155,9 @@ function Poster({ movie, size = "normal" }) {
         aspectRatio: "2 / 3",
         borderRadius: 10,
         overflow: "hidden",
-        background: `linear-gradient(160deg, ${movie.palette[0]}, ${movie.palette[1]})`,
+        background: movie.poster_path
+          ? `url(${TMDB_IMAGE_URL}${movie.poster_path}) center / cover`
+          : `linear-gradient(160deg, ${movie.palette?.[0] || "#6b4a3a"}, ${movie.palette?.[1] || "#2b1f5a"})`,
         display: "flex",
         alignItems: "flex-end",
         padding: isSmall ? 10 : 16,
@@ -175,7 +190,7 @@ function Poster({ movie, size = "normal" }) {
         }}
       >
         <Star size={isSmall ? 10 : 11} fill={TOKENS.marquee} strokeWidth={0} />
-        {movie.vibe.toFixed(1)}
+        {(movie.vote_average ?? movie.vibe ?? 0).toFixed(1)}
       </div>
       <div style={{ position: "relative", zIndex: 1 }}>
         <div
@@ -208,16 +223,102 @@ function Poster({ movie, size = "normal" }) {
 // ---------------------------------------------------------------------------
 // Main app
 // ---------------------------------------------------------------------------
+const formatTMDBMovie = (movie) => ({
+  id: movie.id,
+  title: movie.title,
+  year: movie.release_date
+    ? new Date(movie.release_date).getFullYear()
+    : "N/A",
+  runtime: movie.runtime || 0,
+  vibe: movie.vote_average || 0,
+  mood: null,
+  blurb: movie.overview || "No description available.",
+  poster_path: movie.poster_path,
+  palette: ["#6b4a3a", "#2b1f5a"],
+});
+
 export default function MoodFlix() {
-  const [screen, setScreen] = useState("home"); // home | results | watchlist
+  const [screen, setScreen] = useState("home");
+  const [tmdbMovies, setTmdbMovies] = useState([]);
+
   const [activeMood, setActiveMood] = useState(null);
   const [watchlist, setWatchlist] = useState([]);
   const [activeMovie, setActiveMovie] = useState(null);
+  const [trailerKey, setTrailerKey] = useState(null);
 
-  const results = useMemo(
-    () => MOVIES.filter((m) => m.mood === activeMood?.id),
-    [activeMood]
-  );
+  useEffect(() => {
+    if (!activeMood) return;
+
+    const fetchMovies = async () => {
+      try {
+        const genres = MOOD_GENRES[activeMood.id].join(",");
+
+        const response = await fetch(
+          `https://api.themoviedb.org/3/discover/movie?api_key=${import.meta.env.VITE_TMDB_API_KEY}&language=en-US&sort_by=popularity.desc&with_genres=${genres}&page=1`
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch movies");
+        }
+
+        const data = await response.json();
+
+        console.log(`${activeMood.label} movies:`, data.results);
+
+
+        const detailedMovies = await Promise.all(
+          data.results.map(async (movie) => {
+            const detailsResponse = await fetch(
+              `https://api.themoviedb.org/3/movie/${movie.id}?api_key=${import.meta.env.VITE_TMDB_API_KEY}&language=en-US`
+            );
+
+            const details = await detailsResponse.json();
+
+            return formatTMDBMovie({
+              ...movie,
+              ...details,
+            });
+          })
+        );
+
+        setTmdbMovies(detailedMovies);
+
+      } catch (error) {
+        console.error("TMDB error:", error);
+      }
+    };
+
+    fetchMovies();
+  }, [activeMood]);
+
+const fetchTrailer = async (movieId) => {
+  try {
+    const response = await fetch(
+      `https://api.themoviedb.org/3/movie/${movieId}/videos?api_key=${import.meta.env.VITE_TMDB_API_KEY}&language=en-US`
+    );
+
+    const data = await response.json();
+
+    const trailer = data.results.find(
+      (video) =>
+        video.site === "YouTube" &&
+        video.type === "Trailer"
+    );
+
+    if (trailer) {
+      setTrailerKey(trailer.key);
+    } else {
+      alert("No trailer found for this movie.");
+    }
+  } catch (error) {
+    console.error("Trailer error:", error);
+  }
+};
+
+
+
+
+const results = tmdbMovies;
 
   const isSaved = (id) => watchlist.some((m) => m.id === id);
   const toggleSave = (movie) => {
@@ -693,6 +794,7 @@ export default function MoodFlix() {
               </p>
               <div style={{ display: "flex", gap: 10 }}>
                 <button
+                  onClick={() => fetchTrailer(activeMovie.id)}
                   style={{
                     display: "flex",
                     alignItems: "center",
@@ -707,8 +809,10 @@ export default function MoodFlix() {
                     cursor: "pointer",
                   }}
                 >
-                  <Play size={13} fill="#12101C" /> Watch trailer
+                  <Play size={13} fill="#12101C" />
+                  Watch trailer
                 </button>
+
                 <button
                   onClick={() => toggleSave(activeMovie)}
                   style={{
@@ -736,6 +840,62 @@ export default function MoodFlix() {
           </div>
         </div>
       )}
+
+      {/* TRAILER MODAL */}
+      {trailerKey && (
+        <div
+          onClick={() => setTrailerKey(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.85)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 20,
+            zIndex: 100,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: 900,
+              aspectRatio: "16 / 9",
+              position: "relative",
+            }}
+          >
+            <button
+              onClick={() => setTrailerKey(null)}
+              style={{
+                position: "absolute",
+                top: -40,
+                right: 0,
+                background: "none",
+                border: "none",
+                color: "#fff",
+                cursor: "pointer",
+              }}
+            >
+              <X size={26} />
+            </button>
+
+            <iframe
+              width="100%"
+              height="100%"
+              src={`https://www.youtube.com/embed/${trailerKey}`}
+              title="Movie trailer"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              style={{
+                border: "none",
+                borderRadius: 14,
+              }}
+            />
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
