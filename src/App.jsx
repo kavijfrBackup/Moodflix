@@ -240,17 +240,20 @@ const formatTMDBMovie = (movie) => ({
 export default function MoodFlix() {
   const [screen, setScreen] = useState("home");
   const [tmdbMovies, setTmdbMovies] = useState([]);
-
   const [activeMood, setActiveMood] = useState(null);
   const [watchlist, setWatchlist] = useState([]);
   const [activeMovie, setActiveMovie] = useState(null);
   const [trailerKey, setTrailerKey] = useState(null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!activeMood) return;
 
     const fetchMovies = async () => {
-      try {
+        setLoading(true);
+        setTmdbMovies([]);
+
+    try {
         const genres = MOOD_GENRES[activeMood.id].join(",");
 
         const response = await fetch(
@@ -285,6 +288,8 @@ export default function MoodFlix() {
 
       } catch (error) {
         console.error("TMDB error:", error);
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -343,7 +348,24 @@ const results = tmdbMovies;
         fontFamily: "'Inter', sans-serif",
       }}
     >
-      <style>{FONT_IMPORT}</style>
+
+      <style>
+        {`
+          ${FONT_IMPORT}
+
+          @keyframes moodflixPulse {
+            0%, 100% {
+              opacity: 0.4;
+              transform: scale(0.9);
+            }
+
+            50% {
+              opacity: 1;
+              transform: scale(1.1);
+            }
+          }
+        `}
+      </style>
 
       {/* Nav */}
       <header
@@ -579,6 +601,48 @@ const results = tmdbMovies;
             </div>
           </div>
 
+        {loading ? (
+          <div
+            style={{
+              minHeight: 300,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 16,
+              color: TOKENS.textMuted,
+            }}
+          >
+            <Film
+              size={32}
+              color={TOKENS.marquee}
+              style={{
+                animation: "moodflixPulse 1.2s ease-in-out infinite",
+              }}
+            />
+
+            <div
+              style={{
+                fontFamily: "'Fraunces', serif",
+                fontSize: 20,
+                color: TOKENS.text,
+              }}
+            >
+              Finding your films...
+            </div>
+
+            <div
+              style={{
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: 11,
+                letterSpacing: 1.5,
+                textTransform: "uppercase",
+              }}
+            >
+              Matching the mood
+            </div>
+          </div>
+        ) : (
           <div
             style={{
               display: "grid",
@@ -588,8 +652,12 @@ const results = tmdbMovies;
           >
             {results.map((movie) => (
               <div key={movie.id}>
-                <div style={{ position: "relative", cursor: "pointer" }} onClick={() => setActiveMovie(movie)}>
+                <div
+                  style={{ position: "relative", cursor: "pointer" }}
+                  onClick={() => setActiveMovie(movie)}
+                >
                   <Poster movie={movie} />
+
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -619,12 +687,21 @@ const results = tmdbMovies;
                     />
                   </button>
                 </div>
-                <div style={{ marginTop: 8, fontSize: 12.5, color: TOKENS.textMuted, lineHeight: 1.4 }}>
+
+                <div
+                  style={{
+                    marginTop: 8,
+                    fontSize: 12.5,
+                    color: TOKENS.textMuted,
+                    lineHeight: 1.4,
+                  }}
+                >
                   {movie.blurb}
                 </div>
               </div>
             ))}
           </div>
+        )}
         </div>
       )}
 
